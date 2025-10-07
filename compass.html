@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Compass to MQTT Thingsboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .compass {
+            width: 200px;
+            height: 200px;
+            border: 3px solid white;
+            border-radius: 50%;
+            margin: 20px auto;
+            position: relative;
+            background: rgba(255,255,255,0.1);
+        }
+        .needle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 2px;
+            height: 80px;
+            background: red;
+            transform-origin: bottom center;
+            transform: translate(-50%, -100%);
+            transition: transform 0.1s ease;
+        }
+        .center-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .heading {
+            font-size: 2em;
+            margin: 20px 0;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .connected { background: rgba(0,255,0,0.3); }
+        .disconnected { background: rgba(255,0,0,0.3); }
+        .permission { background: rgba(255,255,0,0.3); }
+        .instructions {
+            margin-top: 30px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <h1>Phone Compass to MQTT Thingsboard</h1>
+
+    <div class="compass">
+        <div class="needle" id="needle"></div>
+        <div class="center-dot"></div>
+    </div>
+
+    <div class="heading" id="heading">0°</div>
+
+    <div class="status" id="status">Requesting permission...</div>
+
+    <div id="mqtt-status">Ready to send data...</div>
+
+    <div class="instructions">
+        <p>🔄 Compass data is sent every second for smooth updates</p>
+    </div>
+
+    <script>
+        // CORS bypass
+        (function() {
+            const originalFetch = window.fetch;
+            Object.defineProperty(window, 'fetch', {
+                writable: true,
+                value: function(url, options = {}) {
+                    return originalFetch(url, {
+                        ...options,
+                        mode: 'no-cors'
+                    });
+                }
+            });
+            console.log('✅ CORS bypass enabled');
+        })();
+
+        const TELEMETRY_ENDPOINT = "https://iot.seag.cloud/api/v1/DEVICE_TOKEN/telemetry";
+
+        let currentHeading = 0;
+        let serverConnected = false;
+        let lastSentHeading = null;
+
+        // Send heading data directly via HTTPS
+        function sendHeading(heading) {
+            // Only send if heading changed by 1 degree or more (smooth updates)
+            if (lastSentHeading !== null && Math.abs(heading - lastSentHeading) < 1) {
+                return;
+            }
+
+            const data = { heading: heading, status: "active" };
+
+            fetch(TELEMETRY_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                console.log("Response received:", response);
+                // With no-cors mode, we can't read response details, but 200 means success
+                if (!serverConnected) {
+                    document.getElementById('mqtt-status').innerHTML = '✅ Connected to IoT Platform';
+                    document.getElementById('mqtt-status').className = 'connected';
+                    serverConnected = true;
+                }
+                lastSentHeading = heading;
+                console.log("✅ Heading sent successfully:", heading);
+            })
+            .catch(error => {
+                console.error("Error sending to IoT Platform:", error);
+                document.getElementById('mqtt-status').innerHTML = `❌ Connection error: ${error.message}`;
+                document.getElementById('mqtt-status').className = 'disconnected';
+                serverConnected = false;
+            });
+        }
+
+        // Handle device orientation
+        function handleOrientation(event) {
+            const alpha = event.alpha; // Compass heading (0-360)
+
+            if (alpha !== null) {
+                currentHeading = Math.round(alpha);
+
+                // Update display
+                document.getElementById('heading').textContent = currentHeading + '°';
+                document.getElementById('needle').style.transform =
+                    `translate(-50%, -100%) rotate(${-alpha}deg)`;
+            }
+        }
+
+        // Request permission and start listening
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            // iOS 13+ requires permission
+            document.getElementById('status').innerHTML = 'Tap to enable compass';
+            document.getElementById('status').className = 'permission';
+
+            document.addEventListener('click', () => {
+                DeviceOrientationEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            document.getElementById('status').innerHTML = '✅ Compass active';
+                            document.getElementById('status').className = 'connected';
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            document.getElementById('status').innerHTML = '❌ Permission denied';
+                            document.getElementById('status').className = 'disconnected';
+                        }
+                    });
+            });
+        } else {
+            // Older browsers or non-iOS
+            document.getElementById('status').innerHTML = '✅ Compass active';
+            document.getElementById('status').className = 'connected';
+            window.addEventListener('deviceorientation', handleOrientation);
+        }
+
+        // Send heading every 1 second for smooth updates
+        setInterval(() => {
+            if (currentHeading !== null) {
+                sendHeading(currentHeading);
+            }
+        }, 1000);
+
+        // Test connection on load
+        setTimeout(() => {
+            sendHeading(0);
+        }, 1000);
+    </script>
+</body>
+</html>

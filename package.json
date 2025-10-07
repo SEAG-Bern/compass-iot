@@ -1,0 +1,11 @@
+{
+  "name": "compass-iot",
+  "version": "1.0.0",
+  "description": "Phone Compass to ThingsBoard",
+  "main": "compass.html",
+  "scripts": {},
+  "dependencies": {},
+  "devDependencies": {},
+  "author": "",
+  "note": "This app runs directly in the browser - no backend server needed"
+}
