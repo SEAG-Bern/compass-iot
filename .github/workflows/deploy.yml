@@ -27,7 +27,7 @@ jobs:
       - name: Replace device token
         run: |
           # Replace the placeholder with the actual device token from secrets
-          sed -i 's|DEVICE_TOKEN|${{ secrets.DEVICE_TOKEN }}|g' compass.html
+          sed -i 's|DEVICE_TOKEN|${{ secrets.DEVICE_TOKEN }}|g' index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
